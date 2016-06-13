@@ -50,7 +50,7 @@ class _MeasureThread(Thread):
 	def run(self):
 		'''Starts tcpdump listening'''
 		self._process = subprocess.Popen(cmd_tcpdump_measure, shell=True)
-		self._process.wait()
+		#self._process.wait()
 
 	def stop(self):
 		'''Stops tcpdump listening'''
@@ -85,7 +85,7 @@ def _measure_packages(site):
 def _fetch_destination_ips():
 	'''fetches destination ip adresses from tcpdump output'''
 	process = subprocess.Popen(cmd_tcpdump_output, shell=True, stdout=PIPE)
-	process.wait()
+	#process.wait()
 	stdout, error = process.communicate() #fetching output ip adresses
 	return [ip for ip in stdout.split('\n') if ':' not in ip and ip] #exclude ipv6 addresses and empty string
 
