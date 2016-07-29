@@ -1,44 +1,40 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import sys, time, subprocess, urllib
+import sys, time, subprocess, urllib, webbrowser
 from threading import Thread
 from subprocess import PIPE
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
 
-# ---------- CONSTANTS ----------
-cmd_wget = 'wget -q www.%s'
-cmd_tcpdump_measure = 'tcpdump -i wlan0 -w testfile.pcap'
-cmd_tcpdump_output = 'tcpdump -nn -r testfile.pcap \'tcp or udp\' | cut -f 5 -d " " | cut -f 1-4 -d "." | sort | uniq | head'
-cmd_clean_index = 'rm -f index.html*'
-cmd_clean_pcap = 'rm -f testfile.pcap'
-cmd_pkill_thread = 'pkill tcpdump'
-cmd_whois = 'whois %s'
-tcpdump_trace_delay = 5
+# CONSTANTS
+CMD_TCPDUMP_MEASURE = 'tcpdump -i eth0 -w tmp.pcap'
+CMD_TCPDUMP_OUTPUT = 'tcpdump -nn -r tmp.pcap \'tcp or udp\' | cut -f 5 -d " " | cut -f 1-4 -d "." | sort | uniq | head'
+CMD_CLEAN_PCAP = 'rm -f tmp.pcap'
+CMD_PKILL_THREAD = 'pkill tcpdump'
+CMD_WHOIS = 'whois %s'
+TCPDUMP_TRACE_DELAY = 3
 
-# ---------- PUBLIC MEASURMENT UTILITES ----------
-
+# PUBLIC MEASURMENT UTILITES
 def check_cdn_usage(site, cdn_list, verbose=False):
 	'''matches cdn usage for a given page with a given cdn list'''
 	result = ()
 	# measure packages to given site
-	_measure_packages(site)
+	_trace_packages(site)
 	# read tcpdump destination ip adresses
-	ips = _fetch_destination_ips()
+	ips = _extract_destination_ips()
 	# fetch and lookup output destination ip adresses
 	nodes = _lookup_reverse_dns(ips)
 	# match resulting names with cdns
 	result = _match_cdn_names(site, nodes, cdn_list)
-
 	# debug output if verbose
 	if verbose:
 		_verbose(site, ips, nodes, result)
-
-	# clean up
-	_post_measurement()
+	# remove temporary files
+	_cleanup()
 	return result
 
-# ---------- PRIVATE MEASURMENT UTILITES ----------
-
+# PRIVATE MEASURMENT UTILITES
 class _MeasureThread(Thread):
 	'''Helper thread as listening via tcpdump blocks the script'''
 
@@ -49,12 +45,12 @@ class _MeasureThread(Thread):
 
 	def run(self):
 		'''Starts tcpdump listening'''
-		self._process = subprocess.Popen(cmd_tcpdump_measure, shell=True)
+		self._process = subprocess.Popen(CMD_TCPDUMP_MEASURE, shell=True)
 		#self._process.wait()
 
 	def stop(self):
 		'''Stops tcpdump listening'''
-		subprocess.call(cmd_pkill_thread, shell=True)
+		subprocess.call(CMD_PKILL_THREAD, shell=True)
 
 def _read_parameters(params):
 	'''validates and reads input parameters for measurement'''
@@ -68,23 +64,24 @@ def _read_parameters(params):
 	site_list = [site.strip() for site in site_list]
 	return (int(params[0]), params[1], site_list, cdn_list)
 
-def _measure_packages(site):
-	'''measures packages resulting in requesting given site'''
-	# starting thread
+def _trace_packages(site):
+	'''traces packages after requesting given site'''
+	# starting thread with tcpdump listening
 	thread = _MeasureThread()
 	thread.start()
-	# fetching page
-	time.sleep(tcpdump_trace_delay) # give tcpdump a little time
-	wget = cmd_wget %(site)
-	process = subprocess.Popen(wget, shell=True)
-	process.wait()
-	# finishing thread
+	time.sleep(TCPDUMP_TRACE_DELAY) # give tcpdump a little time
+	# load page with browser
+	browser = webdriver.Firefox()
+	browser.get("http://"+site)
+	time.sleep(3)
+	browser.close()
+	# stop tcpdump listening
 	thread.stop()
 	thread.join()
 
-def _fetch_destination_ips():
+def _extract_destination_ips():
 	'''fetches destination ip adresses from tcpdump output'''
-	process = subprocess.Popen(cmd_tcpdump_output, shell=True, stdout=PIPE)
+	process = subprocess.Popen(CMD_TCPDUMP_OUTPUT, shell=True, stdout=PIPE)
 	#process.wait()
 	stdout, error = process.communicate() #fetching output ip adresses
 	return [ip for ip in stdout.split('\n') if ':' not in ip and ip] #exclude ipv6 addresses and empty string
@@ -94,9 +91,10 @@ def _lookup_reverse_dns(ips):
 	Returns a list of the record content of org-name or OrgName'''
 	nodes = []
 	for ip in ips:
-		process = subprocess.Popen(cmd_whois %(ip), shell=True, stdout=PIPE)
+		process = subprocess.Popen(CMD_WHOIS %(ip), shell=True, stdout=PIPE)
 		process.wait()
 		stdout, error = process.communicate() #fetching output ip adresses
+		# find organisation name
 		org_name = [line for line in stdout.split('\n') if 'org-name:' in line.lower() or 'orgname:' in line.lower()]
 		if org_name:
 			org_name = org_name[0].lower().strip('org-name:').strip('orgname:')
@@ -114,10 +112,9 @@ def _match_cdn_names(site, nodes, cdn_list):
 				matched_cdns.add(cdn_name)
 	return (site, list(matched_cdns), nodes)
 
-def _post_measurement():
+def _cleanup():
 	'''removes files generated during measurement'''
-	subprocess.call(cmd_clean_index, shell=True)
-	subprocess.call(cmd_clean_pcap, shell=True)
+	subprocess.call(CMD_CLEAN_PCAP, shell=True)
 
 def _collect_result(page_result, complete_result):
 	'''Collects all results during measurement'''
@@ -130,8 +127,7 @@ def _collect_result(page_result, complete_result):
 		complete_result[cdn] = (amount, pages)
 
 
-# ---------- PRIVATE OUTPUT UTILITIES ----------
-
+# PRIVATE OUTPUT UTILITIES
 def _verbose(site, ips, nodes, result):
 	''' prompts verbose output if mode active '''
 	output_dic = {'site': site, 'ips': ips, 'nodes': nodes, 'result': result}
@@ -167,13 +163,13 @@ def _write_measurment_results(result, total, file_name=None):
 			output_dic = {'cdn':cdn, 'amount':value_tuple[0], 'pages':value_tuple[1], 'total':total}
 			print output.format(**output_dic)		
 		print output_footer
+
 def _help():
 	print 'Script needs folowing parameters:'
 	print '\t1: Amount of pages to read from file popular-websites'
 	print '\t2: Name of the result file'
 
-# ---------- START ----------
-
+# MAIN 
 if __name__ == '__main__':
 
 	# init
@@ -181,7 +177,7 @@ if __name__ == '__main__':
 	complete_result = {} # complete_result {cdn: (amount, [pages])}
 	argv = sys.argv[1:]
 
-	# reading input
+	# guard clause for parameters
 	if len(argv) != 2:
 		_help()
 		sys.exit()
@@ -191,7 +187,7 @@ if __name__ == '__main__':
 	print '--------- MEASUREMENT STARTED ---------'
 	site_list = site_list[:total]
 	for site in site_list:
-		page_result = check_cdn_usage(site, cdn_list, False)
+		page_result = check_cdn_usage("reddit.com", cdn_list, False)
 		_collect_result(page_result, complete_result)
 
 	# writing result
