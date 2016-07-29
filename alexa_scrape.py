@@ -9,7 +9,7 @@ BASE_URL = "http://www.alexa.com/topsites/global;"
 SITES_PER_PAGE = 25
 
 # PUBLIC FUNCTIONS
-def retrieve_pages(amount):
+def extract_pages(amount):
 	'''Fetches the amount of requested pages from alexa.com as a list'''
 	max_index = _calculate_index(amount, SITES_PER_PAGE)
 	result = []
@@ -46,7 +46,7 @@ def _calculate_index(amount, sites_per_page):
 	return amount/sites_per_page
 
 def _update_progess(current, end):
-	'''Progess bar for measurment'''
+	'''Progess bar for scraping'''
 	sys.stdout.write("processed %s/%s pages" % (str(current), str(end)))
 	sys.stdout.flush()
 	sys.stdout.write("\r")
@@ -69,13 +69,16 @@ if __name__ == '__main__':
 	# reading args
 	amount_pages, output_file = int(argv[0]), argv[1]
 
-	# fetches requested alexa top sites
-	print 'fetching top %s sites on alexa...' %(amount_pages)
-	top_sites = retrieve_pages(amount_pages)
+	# guard clause for amount
+	if amount_pages%SITES_PER_PAGE != 0:
+		print 'Sorry - can currently only deal with amounts dividable by %d' %(SITES_PER_PAGE)
+		sys.exit()
 
+	# fetches requested alexa top sites
+	print 'extracting top %s sites from www.alexa.com...' %(amount_pages)
+	top_sites = extract_pages(amount_pages)
+	
 	# writing result file
+	print '\ngot it! writing file: %s' %(output_file)	
 	_write_result(top_sites, output_file, '\n')
-	print ''
-	print top_sites
-	print 'got it! writing file...'
 	print 'all done'
