@@ -9,8 +9,8 @@ BASE_URL = "http://www.alexa.com/topsites/global;"
 SITES_PER_PAGE = 25
 
 # PUBLIC FUNCTIONS
-def extract_pages(amount):
-	'''Fetches the amount of requested pages from alexa.com as a list'''
+def extract(amount):
+	'''Extracts the amount of requested pages from alexa.com as a list'''
 	max_index = _calculate_index(amount, SITES_PER_PAGE)
 	result = []
 	# alex loop , only 25 entries per page
@@ -76,7 +76,7 @@ if __name__ == '__main__':
 
 	# fetches requested alexa top sites
 	print 'extracting top %s sites from www.alexa.com...' %(amount_pages)
-	top_sites = extract_pages(amount_pages)
+	top_sites = extract(amount_pages)
 	
 	# writing result file
 	print '\ngot it! writing file: %s' %(output_file)	
