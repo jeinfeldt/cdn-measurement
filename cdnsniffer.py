@@ -73,7 +73,6 @@ def _trace_packages(site):
 	# load page with browser
 	browser = webdriver.Firefox()
 	browser.get("http://"+site)
-	time.sleep(3)
 	browser.close()
 	# stop tcpdump listening
 	thread.stop()
@@ -187,7 +186,7 @@ if __name__ == '__main__':
 	print '--------- MEASUREMENT STARTED ---------'
 	site_list = site_list[:total]
 	for site in site_list:
-		page_result = check_cdn_usage("reddit.com", cdn_list, False)
+		page_result = check_cdn_usage(site, cdn_list, False)
 		_collect_result(page_result, complete_result)
 
 	# writing result
